@@ -1,28 +1,18 @@
 import os
 import sys
 
-from networksecurity.exception.exception import NetworkSecurityException 
-from networksecurity.logging.logger import logging
+from abaloneage.exception.exception import PipelineException 
+from abaloneage.logging.logger import logging
 
-from networksecurity.entity.artifact_entity import DataTransformationArtifact,ModelTrainerArtifact
-from networksecurity.entity.config_entity import ModelTrainerConfig
+from abaloneage.entity.artifact_entity import DataTransformationArtifact,ModelTrainerArtifact
+from abaloneage.entity.config_entity import ModelTrainerConfig
 
-
-
-from networksecurity.utils.ml_utils.model.estimator import NetworkModel
-from networksecurity.utils.main_utils.utils import save_object,load_object
-from networksecurity.utils.main_utils.utils import load_numpy_array_data,evaluate_models
-from networksecurity.utils.ml_utils.metric.classification_metric import get_classification_score
-
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import r2_score
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import (
-    AdaBoostClassifier,
-    GradientBoostingClassifier,
-    RandomForestClassifier,
-)
+from abaloneage.utils.ml_utils.model.estimator import NetworkModel
+from abaloneage.utils.main_utils.utils import save_object, load_object
+from abaloneage.utils.main_utils.utils import load_numpy_array_data, evaluate_models
+from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
 import mlflow
 from urllib.parse import urlparse
 
@@ -36,21 +26,14 @@ class ModelTrainer:
             self.model_trainer_config=model_trainer_config
             self.data_transformation_artifact=data_transformation_artifact
         except Exception as e:
-            raise NetworkSecurityException(e,sys)
+            raise PipelineException(e,sys)
         
-    def track_mlflow(self,best_model,classificationmetric):
+    def track_mlflow(self,best_model, metrics: dict):
         mlflow.set_registry_uri("https://dagshub.com/edurekajuly24gcp/final_mlops_pipeline.mlflow")
         tracking_url_type_store = urlparse(mlflow.get_tracking_uri()).scheme
         with mlflow.start_run():
-            f1_score=classificationmetric.f1_score
-            precision_score=classificationmetric.precision_score
-            recall_score=classificationmetric.recall_score
-
-            
-
-            mlflow.log_metric("f1_score",f1_score)
-            mlflow.log_metric("precision",precision_score)
-            mlflow.log_metric("recall_score",recall_score)
+            for k,v in metrics.items():
+                mlflow.log_metric(k, v)
             mlflow.sklearn.log_model(best_model,"model")
             # Model registry does not work with file store
             if tracking_url_type_store != "file":
@@ -67,8 +50,8 @@ class ModelTrainer:
         
     def train_model(self,X_train,y_train,x_test,y_test):
         models = {
-                "Random Forest": RandomForestClassifier(verbose=1),
-                "Decision Tree": DecisionTreeClassifier()}
+                "Random Forest": RandomForestRegressor(n_jobs=-1, random_state=42),
+                "Decision Tree": DecisionTreeRegressor()}
         """
         comment
                 "Gradient Boosting": GradientBoostingClassifier(verbose=1),
@@ -77,16 +60,9 @@ class ModelTrainer:
                 }
         """
         params={
-            "Decision Tree": {
-                'criterion':['gini', 'entropy', 'log_loss'],
-                # 'splitter':['best','random'],
-                # 'max_features':['sqrt','log2'],
-            },
+            "Decision Tree": {},
             "Random Forest":{
-                # 'criterion':['gini', 'entropy', 'log_loss'],
-                
-                # 'max_features':['sqrt','log2',None],
-                'n_estimators': [8,16,32,128,256]
+                'n_estimators': [16,32,64,128]
             }}
         """
             "Gradient Boosting":{
@@ -107,45 +83,47 @@ class ModelTrainer:
         """
         model_report:dict=evaluate_models(X_train=X_train,y_train=y_train,X_test=x_test,y_test=y_test,
                                           models=models,param=params)
-        
-        ## To get best model score from dict
-        best_model_score = max(sorted(model_report.values()))
 
-        ## To get best model name from dict
-
-        best_model_name = list(model_report.keys())[
-            list(model_report.values()).index(best_model_score)
-        ]
+        # choose best model by highest r2
+        best_model_name = max(model_report, key=model_report.get)
         best_model = models[best_model_name]
-        y_train_pred=best_model.predict(X_train)
+        y_train_pred = best_model.predict(X_train)
+        y_test_pred = best_model.predict(x_test)
 
-        classification_train_metric=get_classification_score(y_true=y_train,y_pred=y_train_pred)
-        
-        ## Track the experiements with mlflow
-        self.track_mlflow(best_model,classification_train_metric)
+        train_metrics = {
+            'r2': float(r2_score(y_train, y_train_pred)),
+            'mse': float(mean_squared_error(y_train, y_train_pred)),
+        }
+        test_metrics = {
+            'r2': float(r2_score(y_test, y_test_pred)),
+            'mse': float(mean_squared_error(y_test, y_test_pred)),
+        }
 
-
-        y_test_pred=best_model.predict(x_test)
-        classification_test_metric=get_classification_score(y_true=y_test,y_pred=y_test_pred)
-
-        self.track_mlflow(best_model,classification_test_metric)
+        # Track the experiments with mlflow
+        self.track_mlflow(best_model, train_metrics)
+        self.track_mlflow(best_model, test_metrics)
 
         preprocessor = load_object(file_path=self.data_transformation_artifact.transformed_object_file_path)
-            
+
         model_dir_path = os.path.dirname(self.model_trainer_config.trained_model_file_path)
-        os.makedirs(model_dir_path,exist_ok=True)
+        os.makedirs(model_dir_path, exist_ok=True)
 
-        Network_Model=NetworkModel(preprocessor=preprocessor,model=best_model)
-        save_object(self.model_trainer_config.trained_model_file_path,obj=NetworkModel)
-        #model pusher
-        save_object("final_model/model.pkl",best_model)
-        
+        Network_Model = NetworkModel(preprocessor=preprocessor, model=best_model)
+        save_object(self.model_trainer_config.trained_model_file_path, obj=Network_Model)
+        # model pusher - also save raw model
+        save_object("final_model/model.pkl", best_model)
 
-        ## Model Trainer Artifact
-        model_trainer_artifact=ModelTrainerArtifact(trained_model_file_path=self.model_trainer_config.trained_model_file_path,
-                             train_metric_artifact=classification_train_metric,
-                             test_metric_artifact=classification_test_metric
-                             )
+        # create regression metric artifacts
+        from abaloneage.entity.artifact_entity import RegressionMetricArtifact
+
+        train_metric_artifact = RegressionMetricArtifact(r2_score=train_metrics['r2'], mse=train_metrics['mse'])
+        test_metric_artifact = RegressionMetricArtifact(r2_score=test_metrics['r2'], mse=test_metrics['mse'])
+
+        model_trainer_artifact = ModelTrainerArtifact(
+            trained_model_file_path=self.model_trainer_config.trained_model_file_path,
+            train_metric_artifact=train_metric_artifact,
+            test_metric_artifact=test_metric_artifact,
+        )
         logging.info(f"Model trainer artifact: {model_trainer_artifact}")
         return model_trainer_artifact
 
@@ -178,4 +156,4 @@ class ModelTrainer:
 
             
         except Exception as e:
-            raise NetworkSecurityException(e,sys)
+            raise PipelineException(e,sys)

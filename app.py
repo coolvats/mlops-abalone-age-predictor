@@ -9,9 +9,9 @@ load_dotenv()
 mongo_db_url = os.getenv("MONGODB_URL_KEY")
 print(mongo_db_url)
 import pymongo
-from networksecurity.exception.exception import NetworkSecurityException
-from networksecurity.logging.logger import logging
-from networksecurity.pipeline.training_pipeline import TrainingPipeline
+from abaloneage.exception.exception import PipelineException
+from abaloneage.logging.logger import logging
+from abaloneage.pipeline.training_pipeline import TrainingPipeline
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, File, UploadFile,Request
@@ -20,15 +20,15 @@ from fastapi.responses import Response
 from starlette.responses import RedirectResponse
 import pandas as pd
 
-from networksecurity.utils.main_utils.utils import load_object
+from abaloneage.utils.main_utils.utils import load_object
 
-from networksecurity.utils.ml_utils.model.estimator import NetworkModel
+from abaloneage.utils.ml_utils.model.estimator import NetworkModel
 
 
 client = pymongo.MongoClient(mongo_db_url, tlsCAFile=ca)
 
-from networksecurity.constant.training_pipeline import DATA_INGESTION_COLLECTION_NAME
-from networksecurity.constant.training_pipeline import DATA_INGESTION_DATABASE_NAME
+from abaloneage.constant.training_pipeline import DATA_INGESTION_COLLECTION_NAME
+from abaloneage.constant.training_pipeline import DATA_INGESTION_DATABASE_NAME
 
 database = client[DATA_INGESTION_DATABASE_NAME]
 collection = database[DATA_INGESTION_COLLECTION_NAME]
@@ -58,7 +58,7 @@ async def train_route():
         train_pipeline.run_pipeline()
         return Response("Training is successful")
     except Exception as e:
-        raise NetworkSecurityException(e,sys)
+    raise PipelineException(e,sys)
     
 @app.post("/predict")
 async def predict_route(request: Request,file: UploadFile = File(...)):
@@ -83,7 +83,7 @@ async def predict_route(request: Request,file: UploadFile = File(...)):
         return templates.TemplateResponse("table.html", {"request": request, "table": table_html})
         
     except Exception as e:
-            raise NetworkSecurityException(e,sys)
+            raise PipelineException(e,sys)
 
     
 if __name__=="__main__":

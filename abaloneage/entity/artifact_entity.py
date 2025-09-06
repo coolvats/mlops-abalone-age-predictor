@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Union
 
 @dataclass
 class DataIngestionArtifact:
@@ -27,7 +28,13 @@ class ClassificationMetricArtifact:
     recall_score: float
     
 @dataclass
+class RegressionMetricArtifact:
+    r2_score: float
+    mse: float
+    
+@dataclass
 class ModelTrainerArtifact:
     trained_model_file_path: str
-    train_metric_artifact: ClassificationMetricArtifact
-    test_metric_artifact: ClassificationMetricArtifact
+    # can be ClassificationMetricArtifact or RegressionMetricArtifact depending on problem
+    train_metric_artifact: Union[ClassificationMetricArtifact, RegressionMetricArtifact]
+    test_metric_artifact: Union[ClassificationMetricArtifact, RegressionMetricArtifact]

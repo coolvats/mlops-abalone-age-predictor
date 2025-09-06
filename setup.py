@@ -23,7 +23,7 @@ def get_requirements()->List[str]:
     return requirement_lst
 
 setup(
-    name="NetworkSecurity",
+    name="AbaloneAge",
     version="0.0.1",
     author="Ankit Jain",
     author_email="skillfyaugust2025@gmail.com",

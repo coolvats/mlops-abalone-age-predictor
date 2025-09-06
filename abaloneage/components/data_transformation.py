@@ -1,22 +1,25 @@
+
 import sys
 import os
 import numpy as np
 import pandas as pd
 from sklearn.impute import KNNImputer
 from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
 
-from networksecurity.constant.training_pipeline import TARGET_COLUMN
-from networksecurity.constant.training_pipeline import DATA_TRANSFORMATION_IMPUTER_PARAMS
+from abaloneage.constant.training_pipeline import TARGET_COLUMN
+from abaloneage.constant.training_pipeline import DATA_TRANSFORMATION_IMPUTER_PARAMS
 
-from networksecurity.entity.artifact_entity import (
+from abaloneage.entity.artifact_entity import (
     DataTransformationArtifact,
     DataValidationArtifact
 )
 
-from networksecurity.entity.config_entity import DataTransformationConfig
-from networksecurity.exception.exception import NetworkSecurityException 
-from networksecurity.logging.logger import logging
-from networksecurity.utils.main_utils.utils import save_numpy_array_data,save_object
+from abaloneage.entity.config_entity import DataTransformationConfig
+from abaloneage.exception.exception import PipelineException 
+from abaloneage.logging.logger import logging
+from abaloneage.utils.main_utils.utils import save_numpy_array_data, save_object
 
 class DataTransformation:
     def __init__(self,data_validation_artifact:DataValidationArtifact,
@@ -25,38 +28,40 @@ class DataTransformation:
             self.data_validation_artifact:DataValidationArtifact=data_validation_artifact
             self.data_transformation_config:DataTransformationConfig=data_transformation_config
         except Exception as e:
-            raise NetworkSecurityException(e,sys)
+            raise PipelineException(e,sys)
         
     @staticmethod
     def read_data(file_path) -> pd.DataFrame:
         try:
             return pd.read_csv(file_path)
         except Exception as e:
-            raise NetworkSecurityException(e, sys)
+            raise PipelineException(e, sys)
         
-    def get_data_transformer_object(cls)->Pipeline:
+    @classmethod
+    def get_data_transformer_object(cls) -> ColumnTransformer:
         """
-        It initialises a KNNImputer object with the parameters specified in the training_pipeline.py file
-        and returns a Pipeline object with the KNNImputer object as the first step.
-
-        Args:
-          cls: DataTransformation
-
-        Returns:
-          A Pipeline object
+        Returns a ColumnTransformer that applies OneHotEncoder to 'sex' and KNNImputer to numeric columns.
         """
-        logging.info(
-            "Entered get_data_trnasformer_object method of Trnasformation class"
-        )
+        logging.info("Entered get_data_transformer_object method of DataTransformation class")
         try:
-           imputer:KNNImputer=KNNImputer(**DATA_TRANSFORMATION_IMPUTER_PARAMS)
-           logging.info(
-                f"Initialise KNNImputer with {DATA_TRANSFORMATION_IMPUTER_PARAMS}"
-            )
-           processor:Pipeline=Pipeline([("imputer",imputer)])
-           return processor
+            categorical_features = ['sex']
+            numeric_features = [
+                'length', 'diameter', 'height', 'whole_weight',
+                'shucked_weight', 'viscera_weight', 'shell_weight'
+            ]
+            numeric_transformer = Pipeline([
+                ('imputer', KNNImputer(**DATA_TRANSFORMATION_IMPUTER_PARAMS))
+            ])
+            categorical_transformer = Pipeline([
+                ('encoder', OneHotEncoder(handle_unknown='ignore'))
+            ])
+            preprocessor = ColumnTransformer([
+                ('num', numeric_transformer, numeric_features),
+                ('cat', categorical_transformer, categorical_features)
+            ])
+            return preprocessor
         except Exception as e:
-            raise NetworkSecurityException(e,sys)
+            raise PipelineException(e, sys)
 
         
     def initiate_data_transformation(self)->DataTransformationArtifact:
@@ -106,4 +111,4 @@ class DataTransformation:
 
             
         except Exception as e:
-            raise NetworkSecurityException(e,sys)
+            raise PipelineException(e,sys)
