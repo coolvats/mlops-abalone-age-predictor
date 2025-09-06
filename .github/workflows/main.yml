@@ -1,56 +1,116 @@
-name: workflow
+name: CI/CD Pipeline - Abalone Age Predictor
 
 on:
   push:
-    branches:
-      - main
-    paths-ignore:
-      - 'README.md'
+    branches: [main]
+  pull_request:
+    branches: [main]
 
-permissions:
-  id-token: write
-  contents: read
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/abalone-age-predictor
 
 jobs:
-  integration:
-    name: Continuous Integration
+  build-train-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Lint code
-        run: echo "Linting repository"
-
-      - name: Run unit tests
-        run: echo "Running unit tests"
-
-  build-and-push-ecr-image:
-    name: Continuous Delivery
-    needs: integration
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-
-      - name: Install Utilities
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq unzip
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          python-version: '3.9'
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+      - name: Install DVC and dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install dvc[all]
 
-      - name: Build, tag, and push image to Amazon ECR
-        id: build-image
+      - name: Configure DVC remote (DagsHub)
         env:
+          DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+        run: |
+          dvc remote modify origin --local auth basic
+          dvc remote modify origin --local user ${{ secrets.DAGSHUB_USERNAME }}
+          dvc remote modify origin --local password ${{ secrets.DAGSHUB_TOKEN }}
+
+      name: CI/CD Pipeline for Abalone Age Predictor (Docker Hub)
+
+        run: dvc pull
+
+      - name: Run Data Export from MongoDB
+        run: python mongo_export.py
+
+      - name: Run Training Pipeline
+        run: python main.py
+
+      - name: Run Tests
+        run: pytest --maxfail=1 --disable-warnings -q
+
+      - name: Build Docker image
+        run: docker build -t $IMAGE_NAME:latest .
+
+      name: CI/CD Pipeline - Abalone Age Predictor
+
+      on:
+        push:
+          branches: [main]
+        pull_request:
+          branches: [main]
+
+      env:
+        IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/abalone-age-predictor
+
+jobs:
+  build-train-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install DVC and dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install dvc[all]
+
+      - name: Configure DVC remote (DagsHub)
+        env:
+          DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+        run: |
+          dvc remote modify origin --local auth basic
+          dvc remote modify origin --local user ${{ secrets.DAGSHUB_USERNAME }}
+          dvc remote modify origin --local password ${{ secrets.DAGSHUB_TOKEN }}
+
+      - name: DVC Pull Data & Artifacts
+        run: dvc pull
+
+      - name: Run Data Export from MongoDB
+        run: python mongo_export.py
+
+      - name: Run Training Pipeline
+        run: python main.py
+
+      - name: Run Tests
+        run: pytest --maxfail=1 --disable-warnings -q
+
+      - name: Build Docker image
+        run: docker build -t $IMAGE_NAME:latest .
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push Docker image to Docker Hub
+        run: docker push $IMAGE_NAME:latest
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
           IMAGE_TAG: latest
@@ -61,16 +121,16 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-
-  Continuous-Deployment:
-    needs: build-and-push-ecr-image
-    runs-on: self-hosted
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+name: CI/CD Pipeline - Abalone Age Predictor
 
       - name: Configure AWS credentials
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
         uses: aws-actions/configure-aws-credentials@v1
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/abalone-age-predictor
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

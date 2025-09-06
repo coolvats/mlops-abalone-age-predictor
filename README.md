@@ -9,7 +9,6 @@ This project predicts the age of abalone (in rings) using a machine learning pip
 - Automated testing with pytest
 - Data and model versioning with DVC
 
-## Project Structure
 ```
 final_mlops_pipeline/
 ├── Abalone_Data/abalone.csv         # Raw data (for reference)
@@ -20,11 +19,6 @@ final_mlops_pipeline/
 ├── main.py                          # Pipeline runner
 ├── push_data.py                     # Script to push CSV data to MongoDB
 ├── requirements.txt                 # Python dependencies
-├── test_predict.py                  # Pytest for model accuracy
-└── ...
-```
-
-## Setup Instructions
 1. **Clone the repo and install dependencies:**
 	```powershell
 	pip install -r requirements.txt
@@ -40,6 +34,47 @@ final_mlops_pipeline/
 	- Set `DAGSHUB_USER_TOKEN` and (optionally) `DAGSHUB_USERNAME` as environment variables.
 	- The pipeline will log experiments to your DagsHub MLflow repo.
 
+
+## 🚀 CI/CD Pipeline with Docker Hub
+
+This project uses GitHub Actions to automate the full MLOps pipeline:
+
+	1. Pull the latest data and model artifacts from DVC remote.
+	2. Re-run the pipeline to retrain the model and generate new `.pkl` files.
+	3. Run tests to ensure model quality.
+	4. Build a new Docker image with the updated model and code.
+	5. Push the latest image to Docker Hub.
+
+### 🔑 Required GitHub Secrets
+
+Set the following secrets in your GitHub repository:
+
+- `DOCKERHUB_USERNAME`: Your Docker Hub username
+- `DOCKERHUB_TOKEN`: A Docker Hub access token (create at https://hub.docker.com/settings/security)
+- `DVC_TOKEN`: Your DVC remote (DagsHub) token
+- `DVC_USER`: Your DVC remote (DagsHub) username
+- `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`, `MLFLOW_TRACKING_PASSWORD`: (If using MLflow tracking)
+
+### 📝 How the Workflow Works
+
+1. **Trigger:** Any push to `main` or manual dispatch.
+2. **DVC Pull:** Downloads latest data/model from remote.
+3. **Pipeline Run:** Executes `dvc repro` to retrain and generate artifacts.
+4. **Testing:** Runs `pytest test_predict.py` to validate model.
+5. **Docker Build & Push:** Builds and pushes the image to Docker Hub as `DOCKERHUB_USERNAME/abalone-age-predictor:latest`.
+
+### 🐳 Deploying the Latest Image
+
+To pull and run the latest image:
+
+```sh
+docker pull <your-dockerhub-username>/abalone-age-predictor:latest
+docker run -p 8080:8080 <your-dockerhub-username>/abalone-age-predictor:latest
+```
+
+The FastAPI app will be available at `http://localhost:8080`.
+
+---
 ## Running the Pipeline
 ```powershell
 python main.py
@@ -54,9 +89,6 @@ Artifacts (model, preprocessor, metrics) will be saved in `final_model/` and `ar
 2. Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for Swagger UI.
 3. Use `/predict` for batch CSV prediction and `/predict_single` for real-time JSON prediction.
 
-## Testing
-Run the test to check model accuracy:
-```powershell
 python -m pytest -v -s test_predict.py
 ```
 
@@ -98,30 +130,15 @@ python -m pytest -v -s test_predict.py
 For questions or contributions, open an issue or pull request.
 
 
-Setup github secrets:
-AWS_ACCESS_KEY_ID=
+---
+## GitHub Secrets (Required)
 
-AWS_SECRET_ACCESS_KEY=
+Set these secrets in your GitHub repository for CI/CD with Docker Hub:
 
-AWS_REGION = us-east-1
+- `DOCKERHUB_USERNAME`: Your Docker Hub username
+- `DOCKERHUB_TOKEN`: Docker Hub access token (https://hub.docker.com/settings/security)
+- `DVC_TOKEN`: DVC remote (DagsHub) token
+- `DVC_USER`: DVC remote (DagsHub) username
+- `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`, `MLFLOW_TRACKING_PASSWORD`: (If using MLflow tracking)
 
-AWS_ECR_LOGIN_URI = 
-ECR_REPOSITORY_NAME = 
-
-
-Docker Setup In EC2 commands to be Executed
-#optinal
-
-sudo apt-get update -y
-
-sudo apt-get upgrade
-
-#required
-
-curl -fsSL https://get.docker.com -o get-docker.sh
-
-sudo sh get-docker.sh
-
-sudo usermod -aG docker ubuntu
-
-newgrp docker
+No AWS/ECR setup is required. The pipeline is fully automated for Docker Hub.
