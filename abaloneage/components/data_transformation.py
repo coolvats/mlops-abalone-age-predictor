@@ -49,8 +49,10 @@ class DataTransformation:
                 'length', 'diameter', 'height', 'whole_weight',
                 'shucked_weight', 'viscera_weight', 'shell_weight'
             ]
+            from sklearn.preprocessing import StandardScaler
             numeric_transformer = Pipeline([
-                ('imputer', KNNImputer(**DATA_TRANSFORMATION_IMPUTER_PARAMS))
+                ('imputer', KNNImputer(**DATA_TRANSFORMATION_IMPUTER_PARAMS)),
+                ('scaler', StandardScaler())
             ])
             categorical_transformer = Pipeline([
                 ('encoder', OneHotEncoder(handle_unknown='ignore'))

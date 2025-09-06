@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 
 import dagshub
 dagshub.auth.add_app_token(os.environ.get("DAGSHUB_USER_TOKEN"))
-dagshub.init(repo_owner='edurekajuly24gcp', repo_name='final_mlops_pipeline', mlflow=True)
+dagshub.init(repo_owner='coolvats', repo_name='mlops-abalone-age-predictor', mlflow=True)
 
 class ModelTrainer:
     def __init__(self,model_trainer_config:ModelTrainerConfig,data_transformation_artifact:DataTransformationArtifact):
@@ -29,7 +29,7 @@ class ModelTrainer:
             raise PipelineException(e,sys)
         
     def track_mlflow(self,best_model, metrics: dict):
-        mlflow.set_registry_uri("https://dagshub.com/edurekajuly24gcp/final_mlops_pipeline.mlflow")
+        mlflow.set_registry_uri("https://dagshub.com/coolvats/mlops-abalone-age-predictor.mlflow")
         tracking_url_type_store = urlparse(mlflow.get_tracking_uri()).scheme
         with mlflow.start_run():
             for k,v in metrics.items():
@@ -49,9 +49,17 @@ class ModelTrainer:
 
         
     def train_model(self,X_train,y_train,x_test,y_test):
+        from sklearn.ensemble import GradientBoostingRegressor
+        try:
+            from xgboost import XGBRegressor
+        except ImportError:
+            raise PipelineException("XGBoost is not installed. Please install it with 'pip install xgboost' and rerun.", sys)
         models = {
-                "Random Forest": RandomForestRegressor(n_jobs=-1, random_state=42),
-                "Decision Tree": DecisionTreeRegressor()}
+            "Random Forest": RandomForestRegressor(n_jobs=-1, random_state=42),
+            "Decision Tree": DecisionTreeRegressor(),
+            "Gradient Boosting": GradientBoostingRegressor(random_state=42),
+            "XGBoost": XGBRegressor(random_state=42, n_jobs=-1, verbosity=0)
+        }
         """
         comment
                 "Gradient Boosting": GradientBoostingClassifier(verbose=1),
@@ -63,7 +71,18 @@ class ModelTrainer:
             "Decision Tree": {},
             "Random Forest":{
                 'n_estimators': [16,32,64,128]
-            }}
+            },
+            "Gradient Boosting":{
+                'n_estimators': [50,100,200],
+                'learning_rate': [0.1, 0.05, 0.01],
+                'subsample': [0.8, 1.0]
+            },
+            "XGBoost":{
+                'n_estimators': [50, 100, 200],
+                'learning_rate': [0.1, 0.05, 0.01],
+                'max_depth': [3, 5, 7]
+            }
+        }
         """
             "Gradient Boosting":{
                 # 'loss':['log_loss', 'exponential'],

@@ -1,0 +1,7 @@
+stages:
+  get_data_from_mongo:
+    cmd: python mongo_export.py
+    deps:
+    - mongo_export.py
+    outs:
+    - Abalone_Data/abalone.csv
